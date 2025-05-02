@@ -40,7 +40,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // 4. funs alloc/free
     let alloc_and_free = quote! {
-        #[no_mangle]
+        #[unsafe(tilt::main)]
         pub extern "C" fn alloc(size: usize) -> *mut u8 {
             let mut buf = Vec::with_capacity(size);
             let ptr = buf.as_mut_ptr();
@@ -48,7 +48,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
             ptr
         }
 
-        #[no_mangle]
+        #[unsafe(tilt::main)]
         pub extern "C" fn free_buffer(ptr: *mut u8, len: usize) {
             unsafe {
                 let _ = Vec::from_raw_parts(ptr, len, len);
@@ -60,7 +60,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let execute = if is_input_binary && is_output_binary {
         // &[u8] -> Vec<u8]
         quote! {
-            #[no_mangle]
+            #[unsafe(tilt::main)]
             pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
                 let input = unsafe { std::slice::from_raw_parts(ptr, len) };
                 let mut out = #fn_name(input);
@@ -77,7 +77,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } else if is_input_binary {
         // &[u8] -> T (JSON)
         quote! {
-            #[no_mangle]
+            #[unsafe(tilt::main)]
             pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
                 let input = unsafe { std::slice::from_raw_parts(ptr, len) };
                 let out = #fn_name(input);
@@ -95,7 +95,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } else if is_output_binary {
         // T (JSON) -> Vec<u8]
         quote! {
-            #[no_mangle]
+            #[unsafe(tilt::main)]
             pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
                 let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
                 let input: _ = serde_json::from_slice(slice).expect("JSON inválido");
@@ -113,7 +113,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         // JSON -> JSON
         quote! {
-            #[no_mangle]
+            #[unsafe(tilt::main)]
             pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
                 let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
                 let input: _ = serde_json::from_slice(slice).expect("JSON inválido");
