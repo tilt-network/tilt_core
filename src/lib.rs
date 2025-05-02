@@ -30,27 +30,10 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
         pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
             let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
 
-            if let Ok(input_str) = std::str::from_utf8(input_slice) {
-                if let Ok(input): _ = serde_json::from_str(input_str) {
-                    let output = #fn_name(input);
+            // Chamar a função com bytes brutos
+            let output = #fn_name(input_slice);
 
-                    let output_json = serde_json::to_string(&output).expect("Failed to serialize");
-                    let out_bytes = output_json.into_bytes();
-                    let out_bytes = out_bytes.as_slice().to_vec();
-                    let out_len = out_bytes.len();
-                    let out_ptr = out_bytes.as_ptr() as *mut u8;
-                    std::mem::forget(out_bytes);
-
-                    return unsafe {
-                        *retptr.offset(0) = out_ptr as u32;
-                        *retptr.offset(1) = out_len as u32;
-                    }
-                }
-            }
-
-            let mut output = #fn_name(input_slice);
-
-            output.shrink_to_fit();
+            // Retornar bytes brutos diretamente
             let out_len = output.len();
             let out_ptr = output.as_ptr() as *mut u8;
             std::mem::forget(output);
@@ -60,7 +43,41 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 *retptr.offset(1) = out_len as u32;
             }
         }
-    };
+    //     #[unsafe(no_mangle)]
+    //     pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
+    //         let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+
+    //         if let Ok(input_str) = std::str::from_utf8(input_slice) {
+    //             if let Ok(input): _ = serde_json::from_str(input_str) {
+    //                 let output = #fn_name(input);
+
+    //                 let output_json = serde_json::to_string(&output).expect("Failed to serialize");
+    //                 let out_bytes = output_json.into_bytes();
+    //                 let out_bytes = out_bytes.as_slice().to_vec();
+    //                 let out_len = out_bytes.len();
+    //                 let out_ptr = out_bytes.as_ptr() as *mut u8;
+    //                 std::mem::forget(out_bytes);
+
+    //                 return unsafe {
+    //                     *retptr.offset(0) = out_ptr as u32;
+    //                     *retptr.offset(1) = out_len as u32;
+    //                 }
+    //             }
+    //         }
+
+    //         let mut output = #fn_name(input_slice);
+
+    //         output.shrink_to_fit();
+    //         let out_len = output.len();
+    //         let out_ptr = output.as_ptr() as *mut u8;
+    //         std::mem::forget(output);
+
+    //         unsafe {
+    //             *retptr.offset(0) = out_ptr as u32;
+    //             *retptr.offset(1) = out_len as u32;
+    //         }
+    //     }
+    // };
 
     TokenStream::from(expanded)
 }
