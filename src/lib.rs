@@ -5,7 +5,7 @@ use syn::parse::{ParseStream, Result};
 use syn::{ItemFn, LitBool, parse::Parse, parse_macro_input};
 
 struct MacroArgs {
-    binary: Option<bool>, // None = auto, Some(true)=binary, Some(false)=JSON
+    binary: Option<bool>,
 }
 
 impl Parse for MacroArgs {
@@ -17,9 +17,11 @@ impl Parse for MacroArgs {
         if lookahead.peek(syn::Ident) {
             let ident: syn::Ident = input.parse()?;
             if ident == "binary" {
+                // `#[main(binary)]`
                 if input.is_empty() || input.peek(syn::token::Comma) {
                     return Ok(MacroArgs { binary: Some(true) });
                 }
+                // `#[main(binary = false)]`
                 if input.peek(syn::token::Eq) {
                     let _: syn::token::Eq = input.parse()?;
                     let value: LitBool = input.parse()?;
@@ -39,80 +41,50 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(item as ItemFn);
     let fn_name = &input_fn.sig.ident;
 
-    let execute_impl = match args.binary {
-        Some(true) => quote! {
-            #[unsafe(no_mangle)]
-            pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
-                let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-                let mut output: Vec<u8> = #fn_name(input_slice);
-                output.shrink_to_fit();
-                let out_len = output.len();
-                let out_ptr = output.as_ptr() as *mut u8;
-                std::mem::forget(output);
-                unsafe {
-                    *retptr.offset(0) = out_ptr as u32;
-                    *retptr.offset(1) = out_len as u32;
-                }
+    // Implementação binária (bytes brutos).
+    let binary_impl = quote! {
+        #[unsafe(no_mangle)]
+        pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
+            let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+            let mut output: Vec<u8> = #fn_name(input_slice);
+            output.shrink_to_fit();
+            let out_len = output.len();
+            let out_ptr = output.as_ptr() as *mut u8;
+            std::mem::forget(output);
+            unsafe {
+                *retptr.offset(0) = out_ptr as u32;
+                *retptr.offset(1) = out_len as u32;
             }
-        },
-        Some(false) => quote! {
-            #[unsafe(no_mangle)]
-            pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
-                let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-                let input_str = std::str::from_utf8(input_slice).expect("Invalid UTF-8");
-                let input: _ = serde_json::from_str(input_str).expect("Invalid JSON");
-                let output = #fn_name(input);
-                let mut out_bytes = serde_json::to_string(&output)
-                    .expect("Failed to serialize").into_bytes();
-                out_bytes.shrink_to_fit();
-                let out_len = out_bytes.len();
-                let out_ptr = out_bytes.as_ptr() as *mut u8;
-                std::mem::forget(out_bytes);
-                unsafe {
-                    *retptr.offset(0) = out_ptr as u32;
-                    *retptr.offset(1) = out_len as u32;
-                }
-            }
-        },
-        None => quote! {
-            #[unsafe(no_mangle)]
-            pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
-                let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-                let maybe_json = std::str::from_utf8(input_slice).ok()
-                    .and_then(|s| serde_json::from_str(s).ok());
-                let output_any = if let Some(json_in) = maybe_json {
-                    #fn_name(json_in)
-                } else {
-                    #fn_name(input_slice)
-                };
-                let is_vec = std::any::Any::type_id(&output_any) == std::any::TypeId::of::<Vec<u8>>();
-                if is_vec {
-                    let mut out_bytes: Vec<u8> = unsafe { std::mem::transmute_copy(&output_any) };
-                    std::mem::forget(output_any);
-                    out_bytes.shrink_to_fit();
-                    let out_len = out_bytes.len();
-                    let out_ptr = out_bytes.as_ptr() as *mut u8;
-                    std::mem::forget(out_bytes);
-                    unsafe {
-                        *retptr.offset(0) = out_ptr as u32;
-                        *retptr.offset(1) = out_len as u32;
-                    }
-                } else {
-                    let mut json_bytes = serde_json::to_string(&output_any)
-                        .expect("Failed to serialize").into_bytes();
-                    json_bytes.shrink_to_fit();
-                    let out_len = json_bytes.len();
-                    let out_ptr = json_bytes.as_ptr() as *mut u8;
-                    std::mem::forget(json_bytes);
-                    unsafe {
-                        *retptr.offset(0) = out_ptr as u32;
-                        *retptr.offset(1) = out_len as u32;
-                    }
-                }
-            }
-        },
+        }
     };
 
+    // Implementação JSON (entrada e saída como JSON).
+    let json_impl = quote! {
+        #[unsafe(no_mangle)]
+        pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
+            let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+            let input_str = std::str::from_utf8(input_slice).expect("Invalid UTF-8");
+            let input: _ = serde_json::from_str(input_str).expect("Invalid JSON");
+            let mut out_bytes = serde_json::to_string(&#fn_name(input))
+                .expect("Failed to serialize").into_bytes();
+            out_bytes.shrink_to_fit();
+            let out_len = out_bytes.len();
+            let out_ptr = out_bytes.as_ptr() as *mut u8;
+            std::mem::forget(out_bytes);
+            unsafe {
+                *retptr.offset(0) = out_ptr as u32;
+                *retptr.offset(1) = out_len as u32;
+            }
+        }
+    };
+
+    // Decide qual usar: `binary = false` → JSON; caso contrário, binário.
+    let execute_impl = match args.binary {
+        Some(false) => json_impl,
+        _ => binary_impl,
+    };
+
+    // Expande o código final com alloc, free_buffer e execute.
     let expanded = quote! {
         #input_fn
 
@@ -131,5 +103,6 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #execute_impl
     };
+
     TokenStream::from(expanded)
 }
