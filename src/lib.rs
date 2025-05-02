@@ -92,7 +92,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     //             *retptr.offset(1) = out_len as u32;
     //         }
     //     }
-    // };
+    };
 
     TokenStream::from(expanded)
 }
