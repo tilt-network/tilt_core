@@ -31,7 +31,9 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
 
             // Chamar a função com bytes brutos
-            let output = #fn_name(input_slice);
+            let mut output = #fn_name(input_slice);
+
+            output.shrink_to_fit();
 
             // Retornar bytes brutos diretamente
             let out_len = output.len();
