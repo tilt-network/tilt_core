@@ -49,8 +49,9 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
             pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
                 let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
 
-                let output = #fn_name(input_slice);
+                let mut output = #fn_name(input_slice);
 
+                output.shrink_to_fit();
                 let out_len = output.len();
                 let out_ptr = output.as_ptr() as *mut u8;
                 std::mem::forget(output);
@@ -116,7 +117,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                         *retptr.offset(1) = out_len as u32;
                     }
                 } else {
-                    let out_bytes: Vec<u8> = match std::any::Any::type_id(&output) {
+                    let mut out_bytes: Vec<u8> = match std::any::Any::type_id(&output) {
                         id if id == std::any::TypeId::of::<Vec<u8>>() => {
                             let out = unsafe { std::mem::transmute_copy(&output) };
                             std::mem::forget(output);
@@ -127,6 +128,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     };
 
+                    out_bytes.shrink_to_fit();
                     let out_len = out_bytes.len();
                     let out_ptr = out_bytes.as_ptr() as *mut u8;
                     std::mem::forget(out_bytes);
