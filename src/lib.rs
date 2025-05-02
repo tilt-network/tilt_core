@@ -29,22 +29,35 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #[unsafe(no_mangle)]
         pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
             let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-
-            // Chamar a função com bytes brutos
-            let mut output = #fn_name(input_slice);
-
+            let mut output: Vec<u8> = #fn_name(input_slice);
             output.shrink_to_fit();
-
-            // Retornar bytes brutos diretamente
             let out_len = output.len();
             let out_ptr = output.as_ptr() as *mut u8;
             std::mem::forget(output);
-
             unsafe {
                 *retptr.offset(0) = out_ptr as u32;
                 *retptr.offset(1) = out_len as u32;
             }
         }
+        // #[unsafe(no_mangle)]
+        // pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
+        //     let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+
+        //     // Chamar a função com bytes brutos
+        //     let mut output = #fn_name(input_slice);
+
+        //     output.shrink_to_fit();
+
+        //     // Retornar bytes brutos diretamente
+        //     let out_len = output.len();
+        //     let out_ptr = output.as_ptr() as *mut u8;
+        //     std::mem::forget(output);
+
+        //     unsafe {
+        //         *retptr.offset(0) = out_ptr as u32;
+        //         *retptr.offset(1) = out_len as u32;
+        //     }
+        // }
     //     #[unsafe(no_mangle)]
     //     pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
     //         let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
