@@ -25,7 +25,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let alloc_and_free = quote! {
-        #[no_mangle]
+        #[unsafe(tilt::main)]
         pub extern "C" fn alloc(size: usize) -> *mut u8 {
             let mut buf = Vec::with_capacity(size);
             let ptr = buf.as_mut_ptr();
@@ -33,7 +33,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
             ptr
         }
 
-        #[no_mangle]
+        #[unsafe(tilt::main)]
         pub extern "C" fn free_buffer(ptr: *mut u8, len: usize) {
             unsafe {
                 let _ = Vec::from_raw_parts(ptr, len, len);
@@ -43,7 +43,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let exec_fn = if is_binary {
         quote! {
-            #[no_mangle]
+            #[unsafe(tilt::main)]
             pub extern "C" fn execute(retptr: *mut u32, ptr: *const u8, len: usize) {
                 let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
                 let mut output: Vec<u8> = #fn_name(input_slice);
@@ -59,7 +59,7 @@ pub fn main(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         quote! {
-            #[no_mangle]
+            #[unsafe(tilt::main)]
             pub extern "C" fn execute_json(retptr: *mut u32, ptr: *const u8, len: usize) {
                 let input_slice = unsafe { std::slice::from_raw_parts(ptr, len) };
                 let input_str = std::str::from_utf8(input_slice).expect("Invalid UTF-8");
